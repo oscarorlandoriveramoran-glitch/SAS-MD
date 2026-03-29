@@ -11,13 +11,11 @@ st.markdown("""
     <style>
     .report-card { background-color: #1e1e1e; padding: 20px; border-radius: 10px; border-left: 5px solid #00d4ff; color: white; }
     .stTextArea textarea { background-color: #121212; color: #00d4ff; border: 1px solid #333; }
-    .stMetric { background-color: #262730; padding: 15px; border-radius: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
 # 2. Definición del Algoritmo Matemático Rivera (2026)
 def calcular_isd(data):
-    # Extraemos variables de la Matriz 3.0 (asegurando valores numéricos)
     try:
         y1 = float(data.get('y1_score', 0))
         y2 = float(data.get('y2_score', 0))
@@ -25,10 +23,8 @@ def calcular_isd(data):
     except:
         y1, y2, y3 = 0, 0, 0
     
-    # Cálculo del Índice de Soberanía Discursiva (Promedio ponderado)
     isd_final = (y1 + y2 + y3) / 3
     
-    # Lógica de Riesgo del Modelo
     if isd_final >= 80:
         perfil, riesgo, color = "Soberanía Plena", "Bajo / Óptimo", "#00ff88"
     elif isd_final >= 50:
@@ -36,110 +32,63 @@ def calcular_isd(data):
     else:
         perfil, riesgo, color = "Erosión Cognitiva", "Alto / Crítico", "#ff4b4b"
         
-    return {
-        'isd': round(isd_final, 1),
-        'perfil': perfil,
-        'riesgo': riesgo,
-        'color': color,
-        'y1_score': y1,
-        'y2_score': y2,
-        'y3_score': y3
-    }
+    return {'isd': round(isd_final, 1), 'perfil': perfil, 'riesgo': riesgo, 'color': color, 'y1_score': y1, 'y2_score': y2, 'y3_score': y3}
 
-# 3. System Prompt y Conexión IA (Nombre de modelo corregido)
+# 3. System Prompt
 SYSTEM_PROMPT = """
 Eres un analizador de macroestructura discursiva académica basado en el Modelo Diagnóstico Rivera (2026).
-Tu objetivo es detectar la 'Economía de la Dopamina' y erosión cognitiva en textos estudiantiles.
 PRODUCE UN ÚNICO OBJETO JSON con este formato exacto:
-{
-  "y1_score": valor 0-100,
-  "y2_score": valor 0-100,
-  "y3_score": valor 0-100,
-  "evidencia": "frase corta del texto",
-  "descripcion": "diagnóstico breve",
-  "recomendaciones": ["acción 1", "acción 2"]
-}
-Reglas: Devuelve SOLO el JSON. Sin bloques de código ```. Máximo 80 líneas.
+{"y1_score": 0-100, "y2_score": 0-100, "y3_score": 0-100, "evidencia": "texto", "descripcion": "texto", "recomendaciones": ["lista"]}
+Reglas: Devuelve SOLO el JSON. Sin bloques de código ```.
 """
 
-# Inicialización segura de la API
+# 4. Conexión Dual Segura
 model = None
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        # Usamos el nombre técnico completo para evitar el error 404
-        model = genai.GenerativeModel('models/gemini-1.5-flash-latest', system_instruction=SYSTEM_PROMPT)
+        # Intentamos con el nombre más básico que acepta la API v1
+        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT)
     else:
-        st.error("❌ No se encontró la 'GOOGLE_API_KEY' en los Secrets de Streamlit.")
-except Exception as e:
-    st.error(f"Error de configuración inicial: {e}")
+        st.error("❌ No se encontró la API Key en Secrets.")
+except Exception:
+    # Si falla el anterior, intentamos la versión Pro que es más estable en v1beta
+    model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=SYSTEM_PROMPT)
 
 # --- INTERFAZ ---
 st.title("SADAR MD: Auditoría de Soberanía Cognitiva")
-st.caption("Modelo Diagnóstico Macroestructural — Versión Asesor v3.0 | Rivera (2026) | ECC-UJMD")
+st.caption("Modelo Diagnóstico Macroestructural — Rivera (2026) | ECC-UJMD")
 
-texto_estudiante = st.text_area("Cargar micro-prueba escrita:", height=200, placeholder="Pegue el ensayo o respuesta del alumno aquí...")
+texto_estudiante = st.text_area("Cargar micro-prueba escrita:", height=200)
 
 if st.button("Ejecutar Algoritmo ISD v3"):
     if not texto_estudiante:
-        st.warning("⚠️ Por favor, ingrese un texto para analizar.")
-    elif model is None:
-        st.error("El modelo de IA no está configurado. Revisa tus credenciales.")
+        st.warning("Escriba un texto.")
     else:
-        with st.spinner("Procesando Matriz 3.0 y Algoritmo Rivera..."):
+        with st.spinner("Analizando..."):
             try:
-                # Llamada a la IA
+                # Forzamos la respuesta a ser JSON
                 response = model.generate_content(texto_estudiante)
-                
-                # Limpiar la respuesta de posibles etiquetas de código
                 txt_limpio = response.text.replace('```json', '').replace('```', '').strip()
                 res_data = json.loads(txt_limpio)
-                
-                # Ejecutar Algoritmo Matemático
                 reporte = calcular_isd(res_data)
                 
-                # --- VISUALIZACIÓN DE RESULTADOS ---
+                # Renderizado
                 col1, col2 = st.columns([1, 2])
-                
                 with col1:
-                    st.markdown(f"""
-                    <div class='report-card'>
-                        <h2 style='margin:0; color:{reporte['color']};'>ISD: {reporte['isd']}%</h2>
-                        <p style='margin:5px 0;'>PERFIL: <b>{reporte['perfil']}</b></p>
-                        <hr style='border: 0.5px solid #333;'>
-                        <p style='margin:0;'>RIESGO: <span style='color:{reporte['color']}'>{reporte['riesgo']}</span></p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.write("")
-                    st.metric("Variable Y1 (Cohesión)", f"{reporte['y1_score']}%")
-                
+                    st.markdown(f"<div class='report-card'><h2>ISD: {reporte['isd']}%</h2><p>PERFIL: {reporte['perfil']}</p><p>RIESGO: <span style='color:{reporte['color']}'>{reporte['riesgo']}</span></p></div>", unsafe_allow_html=True)
                 with col2:
-                    df_plot = pd.DataFrame({
-                        'Variable': ['Cohesión (Y1)', 'Lenguaje (Y2)', 'Estado (Y3)'],
-                        'Puntaje': [reporte['y1_score'], reporte['y2_score'], reporte['y3_score']]
-                    })
-                    fig = px.bar(df_plot, x='Variable', y='Puntaje', range_y=[0,105], 
-                                 template="plotly_dark", color='Puntaje', 
-                                 color_continuous_scale=[[0, '#ff4b4b'], [0.5, '#ffcc00'], [1, '#00ff88']])
-                    fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10))
+                    df_plot = pd.DataFrame({'Var': ['Y1', 'Y2', 'Y3'], 'Puntaje': [reporte['y1_score'], reporte['y2_score'], reporte['y3_score']]})
+                    fig = px.bar(df_plot, x='Var', y='Puntaje', range_y=[0,105], template="plotly_dark")
                     st.plotly_chart(fig, use_container_width=True)
-
+                
                 st.divider()
-                
-                # Reporte Detallado para el Asesor
-                st.subheader("📋 Reporte para el Asesor Pedagógico")
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.info(f"**Evidencia Crítica:**\n\n_{res_data.get('evidencia', 'No detectada')}_")
-                with c2:
-                    st.success(f"**Intervención Sugerida:**\n\n{res_data.get('recomendaciones', ['Sin recomendaciones'])[0]}")
-                
-                st.write(f"**Diagnóstico de Macroestructura:** {res_data.get('descripcion', 'Sin descripción disponible.')}")
+                st.subheader("📋 Reporte del Asesor")
+                st.write(f"**Evidencia:** {res_data.get('evidencia')}")
+                st.success(f"**Intervención:** {res_data.get('recomendaciones')[0]}")
 
             except Exception as e:
-                st.error("Error al procesar el análisis.")
-                with st.expander("Ver detalle del error"):
-                    st.write(f"Error técnico: {e}")
-                    if 'response' in locals():
-                        st.text(f"Respuesta cruda de la IA: {response.text}")
+                st.error("Error de comunicación con el modelo.")
+                st.info("Esto sucede cuando Google satura la API. Reintenta en 10 segundos.")
+                with st.expander("Detalle"):
+                    st.write(e)
