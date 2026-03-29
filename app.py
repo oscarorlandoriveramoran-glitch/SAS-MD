@@ -15,44 +15,39 @@ def calcular_isd(data):
         y3 = float(data.get('y3_score', 0))
     except:
         y1, y2, y3 = 0, 0, 0
-    
     isd = (y1 + y2 + y3) / 3
-    
     if isd >= 80: p, r, c = "Soberanía Plena", "Bajo", "#00ff88"
     elif isd >= 50: p, r, c = "Dependencia Moderada", "Medio", "#ffcc00"
     else: p, r, c = "Erosión Cognitiva", "Alto", "#ff4b4b"
-    
     return {'isd': round(isd, 1), 'perfil': p, 'riesgo': r, 'color': c, 'y1': y1, 'y2': y2, 'y3': y3}
 
-# 3. Configuración de API (Cambiado a gemini-pro para evitar el Error 404)
+# 3. DIRECCIÓN EXACTA DEL MODELO (Solución al error 404 persistente)
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # gemini-pro es el motor más estable para evitar el error NotFound
-    model = genai.GenerativeModel('gemini-pro')
+    # Usamos la dirección absoluta del modelo para evitar el error de versión v1beta
+    model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
 else:
-    st.error("⚠️ Configura la 'GOOGLE_API_KEY' en los Secrets de Streamlit.")
+    st.error("⚠️ Configura la 'GOOGLE_API_KEY' en los Secrets.")
 
 st.title("SADAR MD: Auditoría de Soberanía Cognitiva")
-st.caption("Modelo Rivera (2026) — Versión de Alta Compatibilidad | ECC-UJMD")
+st.caption("Modelo Rivera (2026) — Versión de Máxima Compatibilidad | ECC-UJMD")
 
-# Interfaz de Usuario
-texto_estudiante = st.text_area("Cargar texto para análisis:", height=200, placeholder="Pegue el texto aquí...")
+texto_estudiante = st.text_area("Cargar texto para análisis:", height=200)
 
 if st.button("Ejecutar Algoritmo ISD v3"):
     if texto_estudiante:
-        with st.spinner("Procesando Matriz 3.0 con Gemini Pro..."):
+        with st.spinner("Analizando macroestructura..."):
             try:
-                # Instrucción embebida para forzar formato JSON
-                instruccion = (
-                    "Eres un experto en macroestructura discursiva. Analiza el texto bajo el Modelo Rivera 2026. "
-                    "Responde ESTRICTAMENTE con un objeto JSON (sin texto extra ni comillas de bloque) que contenga: "
-                    "y1_score (0-100), y2_score (0-100), y3_score (0-100), evidencia (string), descripcion (string), recomendaciones (lista de strings). "
-                    "Texto: "
+                # Instrucción directa en el prompt
+                prompt_completo = (
+                    "Actúa como el Algoritmo ISD v3. Analiza el siguiente texto y responde UNICAMENTE con un objeto JSON. "
+                    "Campos: y1_score, y2_score, y3_score, evidencia (string), descripcion (string), recomendaciones (lista). "
+                    f"Texto: {texto_estudiante}"
                 )
                 
-                response = model.generate_content(instruccion + texto_estudiante)
+                response = model.generate_content(prompt_completo)
                 
-                # Limpieza de respuesta para asegurar JSON puro
+                # Limpieza manual del JSON por si la IA agrega basura
                 res_text = response.text.strip()
                 if "```json" in res_text:
                     res_text = res_text.split("```json")[1].split("```")[0].strip()
@@ -69,34 +64,22 @@ if st.button("Ejecutar Algoritmo ISD v3"):
                         <div style='background:#1e1e1e; padding:20px; border-radius:10px; border-left:5px solid {reporte['color']}; color:white;'>
                             <h2 style='margin:0;'>ISD: {reporte['isd']}%</h2>
                             <p style='margin:5px 0;'>PERFIL: <b>{reporte['perfil']}</b></p>
-                            <p style='margin:0;'>RIESGO: <span style='color:{reporte['color']}'>{reporte['riesgo']}</span></p>
                         </div>
                     """, unsafe_allow_html=True)
                 
                 with col2:
-                    df_plot = pd.DataFrame({
-                        'Variable': ['Cohesión (Y1)', 'Lenguaje (Y2)', 'Estado (Y3)'],
-                        'Puntaje': [reporte['y1'], reporte['y2'], reporte['y3']]
-                    })
-                    fig = px.bar(df_plot, x='Variable', y='Puntaje', range_y=[0,105], 
-                                 template="plotly_dark", color='Puntaje',
-                                 color_continuous_scale=[[0, '#ff4b4b'], [0.5, '#ffcc00'], [1, '#00ff88']])
-                    fig.update_layout(height=250, margin=dict(l=20, r=20, t=20, b=20))
+                    fig = px.bar(x=['Y1', 'Y2', 'Y3'], y=[reporte['y1'], reporte['y2'], reporte['y3']], range_y=[0,105], template="plotly_dark")
                     st.plotly_chart(fig, use_container_width=True)
                 
-                st.divider()
-                st.subheader("📋 Reporte del Asesor")
-                st.write(f"**Evidencia:** {res_data.get('evidencia', 'No disponible')}")
-                st.write(f"**Análisis:** {res_data.get('descripcion', 'No disponible')}")
-                
-                recs = res_data.get('recomendaciones', ['Sin recomendaciones'])
-                st.success(f"**Intervención Sugerida:** {recs[0]}")
+                st.success(f"**Intervención:** {res_data.get('recomendaciones', ['Analizar caso'])[0]}")
             
             except Exception as e:
-                st.error("Error al procesar la respuesta de la IA.")
-                with st.expander("Detalle técnico"):
-                    st.write(e)
-                    if 'response' in locals():
-                        st.text(response.text)
+                st.error(f"Error en el motor: {e}")
+                # Si falla, imprimimos los modelos que tu API realmente ve
+                try:
+                    models = [m.name for m in genai.list_models()]
+                    st.info(f"Modelos disponibles en tu llave: {models}")
+                except:
+                    pass
     else:
-        st.warning("Ingrese un texto para analizar.")
+        st.warning("Ingrese un texto.")
